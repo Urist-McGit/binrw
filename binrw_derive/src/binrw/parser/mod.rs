@@ -13,6 +13,8 @@ use crate::{
 };
 pub(crate) use field_level_attrs::{EnumVariant, StructField, UnitEnumField};
 use macros::attr_struct;
+use proc_macro2::TokenStream;
+use quote::ToTokens;
 pub(crate) use top_level_attrs::{Enum, Input, Struct, UnitOnlyEnum};
 use try_set::TrySet;
 pub(crate) use types::*;
@@ -40,12 +42,17 @@ trait FromAttrs<Attr: syn::parse::Parse> {
                     is_binread_attr(attr)
                 }
             })
-            .flat_map(
-                |attr| match syn::parse2::<MetaAttrList<Attr>>(attr.tokens.clone()) {
+            .flat_map(|attr| {
+                let tokens = match &attr.meta {
+                    syn::Meta::Path(_) => TokenStream::new(),
+                    syn::Meta::List(ml) => ml.tokens.clone(),
+                    syn::Meta::NameValue(nv) => nv.to_token_stream(),
+                };
+                match syn::parse2::<MetaAttrList<Attr>>(tokens) {
                     Ok(list) => either::Left(list.into_iter().map(Ok)),
                     Err(err) => either::Right(core::iter::once(Err(err))),
-                },
-            );
+                }
+            });
 
         let mut all_errors = None::<syn::Error>;
         for attr in attrs {
